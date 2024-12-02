@@ -1,0 +1,59 @@
+---
+title: "Project-6101"
+author: "Sunny"
+date: "2024-11-29"
+output: 
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+```{r init, include=FALSE}
+library(ezids)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+```
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F, message = F, results = "markup")
+options(scipen=999, digits = 5) 
+```
+
+# Data
+
+
+```{r}
+data_raw <- read.csv("C:/Users/qluo/Box/DATS 6101/Group-Project2/Combined_SDOH_2019_2020.csv")
+```
+
+```{r}
+col_indices <- c(36,68,70,72,80,84,88,91,99,102,177,192,199,321,352,400,529,627,640,660,666,678,681)
+subset_data <- data_raw[,col_indices]
+colnames(subset_data) <- c('Percent_femal_pop','Percent_pop_15-17','Percent_pop_18-29','Percent_pop_30-44',
+                           'Percent_pop_American_Indian_and_Alaska_Native','Percent_pop_Asian',
+                           'Percent_pop_Black_and_African_American','Percent_pop_Hispanic',
+                           'Percent_pop_Native_Hawaiian _and_Pacific_Islander','Percent_pop_other_race',
+                           'Percent_pop_not_in_labor_force_>=16','Median_household_income',
+                           'Percent_pop_under_1.37_of_poverty_threshold',
+                           'Unemployment_rate_per_100_population_>=16',
+                           'Number_of_midwives','Number_of_maternal_deaths',
+                           'Number_of_Indian_health_service',
+                           'Median_distance_to_nearest_obstetrics_department','Numer_of_health_centers',
+                           'Number_of_hospitals_with_obstetric','Number_of_hospitals_with_ICU',
+                           'Number_of_hospitals_with_emergency_department','Percent_government_hospitals')
+subset_data
+```
+Considering adding a table to show the variable names and variable labels,or we can divide the variables into different categories, making them clear.
+
+```{r}
+sum(is.na(subset_data))
+
+
+```
+
+

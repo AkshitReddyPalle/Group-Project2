@@ -1,0 +1,153 @@
+---
+title: "Project-6101"
+author: "Sunny"
+date: "2024-10-09"
+output: 
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+```{r init, include=FALSE}
+library(ezids)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+```
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F, message = F, results = "markup")
+options(scipen=999, digits = 5) 
+```
+
+# Data
+I just select the columns "Median household income (dollars, inflation-adjusted to data file year)
+", "Total number of maternal deaths per 100,000 population" and "Total number of drug overdose deaths involving any opioid per 100,000 population".
+
+```{r}
+data_raw <- read.csv("C:/Users/qluo/Box/6101/project/GROUP-PROJECT-1/Combined_SDOH_2019_2020.csv")
+data2 <- subset(data_raw, select = c("ACS_MEDIAN_HH_INC" ,"CDCW_MATERNAL_DTH_RATE", "CDCW_OPIOID_DTH_RATE"))
+colnames(data2) <- c("Median_household_income",
+                     "Total_number_of_maternal_deaths",
+                     "Total_number_of_drug_overdose_deaths")
+data2 <- na.omit(data2)
+```
+
+
+```{r}
+summary(data2)
+```
+
+# EDA
+
+First, the histograms.
+
+```{r }
+ggplot( data=data2, aes(Median_household_income))+
+  geom_histogram(binwidth=5000, col="black", fill="red",boundary=35000)+
+  labs(x="Median household income", 
+       y= "Frequency", 
+       title="Histogram of Median household income")
+ggplot(data=data2,aes(Total_number_of_maternal_deaths))+
+  geom_histogram(breaks=seq(0,2.6,by=.1),
+                 col="black",
+                 fill="green")+
+  labs(x="Total number of maternal deaths( per 100,000 population)",
+       y="Frequency",
+       title="Histogram of Total number of maternal deaths")
+ggplot(data=data2,aes(Total_number_of_drug_overdose_deaths))+
+  geom_histogram(breaks=seq(0,110,by=5),
+                 col="black",
+                 fill="blue")+
+  labs(x="Total number of drug overdose deaths( per 100,000 population)",
+       y="Frequency",
+       title="Histogram of Total number of drug overdose deaths")
+```
+
+Second, the Q-Q plot:
+
+```{r}
+qqnorm(data2$Median_household_income,main="Q-Q plot of Median household income")
+qqline(data2$Median_household_income)
+qqnorm(data2$Total_number_of_maternal_deaths,main="Q-Q plot of Total number of maternal deaths")
+qqline(data2$Total_number_of_maternal_deaths)
+qqnorm(data2$Total_number_of_drug_overdose_deaths,main="Q-Q plot of Total number of drug overdose deaths")
+qqline(data2$Total_number_of_drug_overdose_deaths)
+
+```
+
+
+
+Now, boxplots.
+
+```{r}
+data2$Income_quartile <- ntile(data2$Median_household_income,4)
+data2$Income_label <- case_when(
+  data2$Income_quartile==1 ~ "Low Income",
+  data2$Income_quartile==2 ~ "Middle Income",
+  data2$Income_quartile==3 ~ "Upper Middle Income",
+  data2$Income_quartile==4 ~ "High Income"
+)
+data2$Income_label <- factor(data2$Income_label,
+                             level=c("Low Income", "Middle Income", "Upper Middle Income", "High Income"))
+ggplot(data2,aes(x=Income_label,
+                 y=Total_number_of_maternal_deaths))+
+  geom_boxplot(col="black", fill="orange",outlier.color = "red")+
+  labs(x="Median Household Income quartile", 
+       y= "Frequency", 
+       title="Boxplot of Maternal Deaths by Median household Income Quartile")
+
+ggplot(data2, aes(x=Income_label,
+                  y=Total_number_of_drug_overdose_deaths))+
+  geom_boxplot(col="black",fill="blue",outlier.color = "red")+
+  labs(x="Median Household Income quartile", 
+       y= "Frequency", 
+       title="Boxplot of Drug Overdose Deaths by Median household Income Quartile")
+```
+
+The total number of maternal deaths varies significantly between different income groups; however, the pattern in the number of drug overdose deaths is less distinct when viewed through the boxplots.
+
+# ANOVA Test
+Let's see if the Total number of maternal deaths per 100,000 population and Total number of drug overdose deaths per 100,000 population are different among different Income groups.
+
+```{r}
+anova_maternal_deaths <- aov(Total_number_of_maternal_deaths ~ Income_label, data=data2)
+anova_drug_overdose_deaths <- aov(Total_number_of_drug_overdose_deaths ~ Income_label, data=data2)
+xkabledply(anova_maternal_deaths)
+xkabledply(anova_drug_overdose_deaths)
+
+```
+
+
+From the above ANOVA tests, both the total number of maternal deaths and drug overdose deaths are not all the same among different income groups. Let's do Post-hoc Tukey HSD to see which groups are different from others.
+
+
+## Post-hoc Tukey HSD 
+
+```{r }
+tukey_maternal_deaths <- TukeyHSD(anova_maternal_deaths)
+tukey_drug_overdose_deaths <- TukeyHSD(anova_drug_overdose_deaths)
+tukey_maternal_deaths
+tukey_drug_overdose_deaths
+```
+
+From the Post-hoc Tukey HSD, the total number of maternal deaths of all the groups are different from others except the Upper Middle Income and Middle Income at 5% significance level. However, only the High Income and Middle Income are different in the total number of drug overdose deaths at the 5% significance level. 
+
+Let's have a look at the correlation coefficients between these variables.
+
+# Correlation Matrix
+
+```{r}
+#install.packages("corrplot")
+library("corrplot")
+cor_matrix <- cor(data2[,c("Median_household_income","Total_number_of_maternal_deaths",
+                           "Total_number_of_drug_overdose_deaths")])
+cor_matrix
+```
+
+
+The correlation coefficient between income and maternal death is -0.5052, suggesting the negative relationship between the two variables.
