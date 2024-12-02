@@ -105,7 +105,7 @@ summary(model_1)
 library(randomForest)
 set.seed(123)
 rf_model <- randomForest(
-  Maternal_mortality_rate ~ .- Percent_pop_under_1.37_of_poverty_threshold,
+  Maternal_mortality_rate ~ .,
   data = subset_data,
   ntree=500,
   importance=TRUE
@@ -118,10 +118,71 @@ rf_model <- randomForest(
 rf_model
 
 ```
+```{r}
+library(caret)
+# Split the data into training and test sets
+train_index <- createDataPartition(subset_data$Maternal_mortality_rate, p = 0.8, list = FALSE)
+train_data <- subset_data[train_index, ]
+test_data <- subset_data[-train_index, ]
+# Define the tuning grid with mtry
+tune_grid <- expand.grid(
+  mtry = c(2, 4, 6, 8)  # Range of mtry values to test
+)
+# Model Tuning on Training Data 
+tuned_model <- train(
+  Maternal_mortality_rate ~ ., 
+  data = train_data, 
+  method = "rf", 
+  tuneGrid = tune_grid, 
+  trControl = trainControl(method = "cv", number = 5)
+)
+# Evaluate the tuned model on the test set
+predicted <- predict(tuned_model, newdata = test_data)
+rmse <- sqrt(mean((predicted - test_data$Maternal_mortality_rate)^2))
+print(paste("RMSE on test data:", rmse))
+
+```
+```{r}
+# Predict on the test set
+predicted <- predict(tuned_model, newdata = test_data)
+
+# Calculate RMSE (Root Mean Squared Error)
+rmse <- sqrt(mean((predicted - test_data$Maternal_mortality_rate)^2))
+cat("RMSE on test data:", rmse, "\n")
+
+# Calculate R-squared
+rsq <- 1 - sum((predicted - test_data$Maternal_mortality_rate)^2) /
+             sum((mean(test_data$Maternal_mortality_rate) - test_data$Maternal_mortality_rate)^2)
+cat("R-squared on test data:", rsq, "\n")
+
+```
+
+
+
+
+```{r}
+# Extract the best hyperparameters
+best_mtry <- tuned_model$bestTune$mtry  # Best mtry from tuning
+
+# Refit the final model on the entire dataset
+final_model <- randomForest(
+  Maternal_mortality_rate ~ .,
+  data = subset_data,  # Use the entire dataset
+  ntree = 500,         # Use the best ntree (default is 500)
+  mtry = best_mtry,    # Use the tuned mtry
+  importance = TRUE
+)
+
+# Print the final model summary
+print(final_model)
+
+```
+
+
 
 ```{r}
 # Extract the importance matrix
-importance_metrics <- importance(rf_model)
+importance_metrics <- importance(final_model)
 
 # Sort by `%IncMSE`
 sorted_by_mse <- importance_metrics[order(-importance_metrics[, "%IncMSE"]), ]
@@ -154,39 +215,40 @@ barplot(sorted_by_mse[, "%IncMSE"],
 
 
 Socioeconomic Factors
-The coefficients for Percent_pop_Black_and_African_American, Percent_pop_Asian, and Percent_pop_Hispanic are positive and significant, suggesting that a higher percentage of these racial populations is associated with increased maternal mortality. This highlights the impact of systemic inequities and potential disparities in healthcare access.
+
+The coefficients for `Percent_pop_Black_and_African_American`, `Percent_pop_Asian`, and `Percent_pop_Hispanic` are positive and significant, suggesting that a higher percentage of these racial populations is associated with increased maternal mortality. This highlights the impact of systemic inequities and potential disparities in healthcare access.
 
 Solution:
 
 Address racial disparities by improving access to healthcare for minority populations.
 Implement culturally tailored maternal health programs to meet the specific needs of these communities.
 Invest in training healthcare providers to ensure culturally competent and bias-free care.
+
 Demographic Trends
-The coefficients for Percent_pop_30_44 and Percent_femal_pop are positive and highly significant, while the coefficients for Percent_pop_15_17 and Percent_pop_18_29 are significantly negative. This indicates that counties with a higher percentage of women aged 30-44 experience higher maternal mortality rates. It suggests that earlier pregnancies may reduce maternal mortality risks.
+
+The coefficients for `Percent_pop_30_44` and `Percent_femal_pop` are positive and highly significant, while the coefficients for `Percent_pop_15_17` and `Percent_pop_18_29` are significantly negative. This indicates that counties with a higher percentage of women aged 30-44 experience higher maternal mortality rates. It suggests that earlier pregnancies may reduce maternal mortality risks.
 
 Solution:
 
 Provide policy support to enable younger women to start families, such as affordable childcare, flexible work arrangements, and enhanced parental leave policies.
 Raise awareness of the potential risks of delayed childbearing and provide comprehensive prenatal care for older mothers.
+
 Healthcare Access
-The coefficient for Median_distance_to_nearest_obstetrics_department is negative and highly significant, indicating that greater distances to obstetric care facilities are associated with higher maternal mortality rates. Similarly, the coefficients for Number_of_hospitals_with_obstetric and Percent_government_hospitals are negative and significant, suggesting that increasing the number of hospitals with obstetric departments or government hospitals reduces maternal mortality.
+
+The coefficient for `Median_distance_to_nearest_obstetrics_department` is negative and highly significant, indicating that greater distances to obstetric care facilities are associated with higher maternal mortality rates. Similarly, the coefficients for `Number_of_hospitals_with_obstetric` and `Percent_government_hospitals` are negative and significant, suggesting that increasing the number of hospitals with obstetric departments or government hospitals reduces maternal mortality.
 
 Solution:
 
 Expand access to obstetric care facilities in underserved areas.
 Build or upgrade healthcare infrastructure in regions lacking obstetric and maternal care services.
 Encourage partnerships between public and private sectors to fund and establish obstetric departments in existing hospitals.
+
 Economic Disparities
-The coefficient for Median_household_income is negative and significant, while the coefficient for Unemployment_rate_per_100_population_16 is positive and significant. These findings indicate that counties with higher income levels and lower unemployment rates tend to have lower maternal mortality.
+
+The coefficient for `Median_household_income` is negative and significant, while the coefficient for `Unemployment_rate_per_100_population_16` is positive and significant. These findings indicate that counties with higher income levels and lower unemployment rates tend to have lower maternal mortality.
 
 Solution:
 
 Strengthen socioeconomic support for low-income and unemployed populations.
 Expand access to healthcare subsidies, prenatal care programs, and financial assistance for underserved communities.
 Implement workforce development programs to reduce unemployment and improve economic stability in high-risk counties.
-
-
-```{r}
-
-
-```
