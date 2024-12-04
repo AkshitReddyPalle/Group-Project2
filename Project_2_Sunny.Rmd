@@ -10,11 +10,13 @@ output:
     toc_float: yes
 ---
 ```{r init, include=FALSE}
-library(ezids)
+#library(ezids)
 library(dplyr)
 library(ggplot2)
 library(corrplot)
 library(car)
+library(ranger)
+library(pdp)
 ```
 
 
@@ -68,16 +70,22 @@ sum(complete.cases(subset_data))
 subset_data <- na.omit(subset_data)
 ```
 
+
+```{r}
+hist(subset_data$Maternal_mortality_rate)
+
+```
+
+
+
+
 ```{r}
 model <- lm(Maternal_mortality_rate ~ ., data=subset_data)
-summary(model)
-```
-```{r}
 vif_values <- vif(model)
 print(vif_values)
 
 ```
-The VIF values are relatively high for `Median_household_income` and `Percent_pop_under_1.37_of_poverty_threshold`. Doing the corelation test to check the multicolinearity.    
+The VIF values are relatively high for `Median_household_income` and `Percent_pop_under_1.37_of_poverty_threshold`. Doing the correlation test to check the multicolinearity.    
 
 ```{r}
 #Pearson correlation (default)
@@ -98,96 +106,169 @@ summary(model_1)
 ```
 
 
+```{r}
+par(mfrow = c(2, 2))  # Set up a 2x2 plot grid
+plot(model_1)
+
+
+```
+
+```{r}
+residuals <- residuals(model_1)
+hist(residuals, main = "Histogram of Residuals", xlab = "Residuals")
+```
 
 
 ```{r}
-# Fit a Tree-Based Model
+# Hyperparameter tuning for random forest regression tree 
+# Define the tuning grid: include additional parameters
+tuning_grid <- expand.grid(
+  num.trees = c(100, 200, 300, 500),
+  mtry = 1:(ncol(subset_data) - 1),
+  splitrule = c("variance",'extratrees','maxstat'),    # Split rule for regression
+  min.node.size = c(1, 5, 10),
+  max.depth = c(0, 5, 10, 20)
+)
+
+# Randomly sample 60 combinations from the grid
+set.seed(456)
+random_combinations <- tuning_grid[sample(nrow(tuning_grid), 60), ]
+
+# Cross-validation function
+cross_validate <- function(data, formula, params, k = 5) {
+  folds <- sample(1:k, nrow(data), replace = TRUE)
+  scores <- numeric(k)
+  
+  for (i in 1:k) {
+    # Split data into training and validation sets
+    train_data <- data[folds != i, ]
+    val_data <- data[folds == i, ]
+    
+    # Fit the model
+    model <- ranger(
+      formula = formula,
+      data = train_data,
+      splitrule = params$splitrule,
+      num.trees = params$num.trees,
+      mtry = params$mtry,
+      min.node.size = params$min.node.size,
+      max.depth = params$max.depth,
+      num.threads=16
+    )
+    
+    # Predict and calculate RMSE
+    predictions <- predict(model, val_data)$predictions
+    scores[i] <- sqrt(mean((val_data$Maternal_mortality_rate - predictions)^2))
+  }
+  
+  # Return mean RMSE across folds
+  mean(scores)
+}
+
+# Perform random search
+results <- data.frame(random_combinations, RMSE = NA)
+
+for (i in 1:nrow(random_combinations)) {
+  if (i%%50==0)(
+    cat(paste(".    ",i,"\r"))
+  )
+  else{
+    cat(".")
+  }
+  params <- random_combinations[i, ]
+  results$RMSE[i] <- cross_validate(
+    data = subset_data,
+    formula = Maternal_mortality_rate ~ .,
+    params = params
+  )
+}
+```
+
+
+```{r}
+
+# Find the best combination
+best_model <- results[which.min(results$RMSE), ]
+best_model
+
+```
+
+
+```{r}
+# Fit the Final Tree-Based Model
 library(randomForest)
 set.seed(123)
-rf_model <- randomForest(
+final_rf_model <- ranger(
   Maternal_mortality_rate ~ .,
   data = subset_data,
-  ntree=500,
-  importance=TRUE
+  num.trees = best_model$num.trees,
+  splitrule = best_model$splitrule,
+  mtry = best_model$mtry,
+  min.node.size = best_model$min.node.size,
+  max.depth = best_model$max.depth,
+  num.threads=16,
+  importance='permutation'
   )
 
 
 ```
 
 ```{r}
-rf_model
-
+print(final_rf_model)
 ```
 ```{r}
-library(caret)
-# Split the data into training and test sets
-train_index <- createDataPartition(subset_data$Maternal_mortality_rate, p = 0.8, list = FALSE)
-train_data <- subset_data[train_index, ]
-test_data <- subset_data[-train_index, ]
-# Define the tuning grid with mtry
-tune_grid <- expand.grid(
-  mtry = c(2, 4, 6, 8)  # Range of mtry values to test
-)
-# Model Tuning on Training Data 
-tuned_model <- train(
-  Maternal_mortality_rate ~ ., 
-  data = train_data, 
-  method = "rf", 
-  tuneGrid = tune_grid, 
-  trControl = trainControl(method = "cv", number = 5)
-)
-# Evaluate the tuned model on the test set
-predicted <- predict(tuned_model, newdata = test_data)
-rmse <- sqrt(mean((predicted - test_data$Maternal_mortality_rate)^2))
-print(paste("RMSE on test data:", rmse))
+# Partial dependence for multiple features
+features <- c("Percent_pop_Black_and_African_American","Percent_pop_30_44",'Median_distance_to_nearest_obstetrics_department','Number_of_hospitals_with_obstetric','Median_household_income')
 
-```
-```{r}
-# Predict on the test set
-predicted <- predict(tuned_model, newdata = test_data)
 
-# Calculate RMSE (Root Mean Squared Error)
-rmse <- sqrt(mean((predicted - test_data$Maternal_mortality_rate)^2))
-cat("RMSE on test data:", rmse, "\n")
+# Loop to generate and print plots
 
-# Calculate R-squared
-rsq <- 1 - sum((predicted - test_data$Maternal_mortality_rate)^2) /
-             sum((mean(test_data$Maternal_mortality_rate) - test_data$Maternal_mortality_rate)^2)
-cat("R-squared on test data:", rsq, "\n")
-
+for (feature in features) {
+  pd <- partial(
+    object = final_rf_model,
+    pred.var = feature,
+    train = subset_data,
+    pred.fun = function(object, newdata) {
+      predict(object, data = newdata)$predictions
+    }
+  )
+  
+  # Convert partial dependence to a data frame
+  pd_df <- as.data.frame(pd)
+  # Apply spline smoothing
+  spline_fit <- smooth.spline(pd_df[,feature], pd_df$yhat, spar = 0.7)  # spar = smoothing parameter
+  
+  # Convert spline results to a data frame for ggplot
+  spline_df <- data.frame(
+    feature = spline_fit$x,
+    yhat_smooth = spline_fit$y
+  )
+  colnames(spline_df)[1] <- feature
+  # Create a proper ggplot
+  print(ggplot(spline_df, aes_string(x = feature, y = "yhat_smooth")) +
+    geom_line() +
+    ggtitle(paste("Partial Dependence of", feature)) +
+    xlab(feature) +
+    ylab("Predicted Maternal Mortality Rate") +
+    theme_minimal())
+}
 ```
 
 
-
-
 ```{r}
-# Extract the best hyperparameters
-best_mtry <- tuned_model$bestTune$mtry  # Best mtry from tuning
+# Extract the importance metrics as a named vector
+importance_metrics <- final_rf_model$variable.importance
 
-# Refit the final model on the entire dataset
-final_model <- randomForest(
-  Maternal_mortality_rate ~ .,
-  data = subset_data,  # Use the entire dataset
-  ntree = 500,         # Use the best ntree (default is 500)
-  mtry = best_mtry,    # Use the tuned mtry
-  importance = TRUE
+# Convert to a data frame for easier manipulation
+importance_df <- data.frame(
+  Variable = names(importance_metrics),
+  `%IncMSE` = importance_metrics
 )
 
-# Print the final model summary
-print(final_model)
+# Sort by `%IncMSE` in descending order
+sorted_by_mse <- importance_df[order(-importance_df$`X.IncMSE`), ]
 
-```
-
-
-
-```{r}
-# Extract the importance matrix
-importance_metrics <- importance(final_model)
-
-# Sort by `%IncMSE`
-sorted_by_mse <- importance_metrics[order(-importance_metrics[, "%IncMSE"]), ]
-
-# View the sorted matrix
+# View the sorted importance
 print(sorted_by_mse)
 ```
 
@@ -196,7 +277,7 @@ The column `%IncMSE` stands for percentage increase in Mean Squared Error.
 Measures how much the model’s prediction error increases when a particular variable is randomly permuted while keeping all other variables unchanged..
 Higher values indicate that the variable is important for the model's predictive accuracy.It reflects the variable's contribution to the overall model performance.
 The column `IncNodePurity` stands for Increase in Node Purity.
-Reflects the total decrease in node impurity (measured by RSS for regression or Gini index for classification) attributed to splits involving this variable.
+Reflects the total decrease in node impurity (measured by RSS for regression) attributed to splits involving this variable.
 Higher values suggest that the variable contributes significantly to better node splits.
 
 ```{r}
@@ -204,7 +285,7 @@ Higher values suggest that the variable contributes significantly to better node
 par(mar = c(10, 5, 2, 2))  # Increase bottom margin
 
 # Bar plot with adjusted margins
-barplot(sorted_by_mse[, "%IncMSE"],
+barplot(sorted_by_mse[, "X.IncMSE"],
         names.arg = rownames(sorted_by_mse),
         las = 2,
         col = "skyblue",
