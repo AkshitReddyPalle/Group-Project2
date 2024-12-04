@@ -169,7 +169,7 @@ merged_2020 <- left_join(impute_2020, state_2020, by = "state_fips") %>%
 combined <- bind_rows(merged_2019, merged_2020)
 
 # View final combined data
-print(head(combined))
+print(combined)
 ```
 
 ```{r}
@@ -198,7 +198,7 @@ subset_data <- merged_data %>%
   ) %>%
   select(-maternal_mortality_rate,-countyfips, -YEAR,-County) # Remove unnecessary columns if desired
 # View the updated subset_data
-print(head(subset_data))
+print(subset_data)
 ```
 
 ```{r}
@@ -240,16 +240,13 @@ cor.test(subset_data$Median_household_income, subset_data$Percent_pop_under_1.37
 ```
 The coefficients for the two variables are higher than 0.8. Drop `Percent_pop_under_1.37_of_poverty_threshold` and run the model 
 ```{r}
-# Fit a model excluding Percent_pop_under_1.37_of_poverty_threshold
+# Fit a model excluding Median_household_income
 model_1 <- lm(Maternal_mortality_rate ~ . - Percent_pop_under_1.37_of_poverty_threshold, data = subset_data)
 
 # View summary
 summary(model_1)
 
 ```
-The coefficients for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American ` are positively significant, meaning that counties with higher percentage of American Indian and Black have higher maternal mortality rate.
-
-
 
 
 ```{r}
@@ -261,9 +258,9 @@ plot(model_1)
 
 ```{r}
 residuals <- residuals(model_1)
-hist(residuals, 
+hist(residuals,
      xlim=c(-5,5),
-     breaks=100,
+     breaks = 100,
      main = "Histogram of Residuals", xlab = "Residuals")
 ```
 
@@ -367,7 +364,7 @@ print(final_rf_model)
 ```
 ```{r}
 # Partial dependence for multiple features
-features <- c("Percent_pop_Black_and_African_American","Percent_pop_30_44",'Median_distance_to_nearest_obstetrics_department','Number_of_hospitals_with_obstetric','Median_household_income','Percent_femal_pop')
+features <- c("Percent_pop_Black_and_African_American","Percent_pop_30_44",'Median_distance_to_nearest_obstetrics_department','Number_of_hospitals_with_obstetric','Median_household_income')
 
 
 # Loop to generate and print plots
