@@ -249,6 +249,16 @@ summary(model_1)
 ```
 The coefficients for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American ` are positively significant, meaning that counties with higher percentage of American Indian and Black have higher maternal mortality rate.
 
+The coefficient for `Median_household_income` is negatively significant, indicating that Higher median household income is associated with a lower maternal mortality rate.
+
+
+The coefficient for `Number_of_hospitals_with_ICU` is negatively significant, suggesting that More hospitals with ICUs are associated with a lower maternal mortality rate.
+
+The coefficient for `Percent_pop_30_44` is negatively significant, indicating a higher percentage of women aged 30-44 is associated with a lower maternal mortality rate. It may be explained that compared with the base group (older than 44), this group has lower maternal mortality rate.
+
+The coefficient for `Number_of_hospitals_with_obstetric` is positively significant which might reflect referral bias, where areas with higher maternal mortality attract more obstetric services.
+
+
 
 
 
@@ -403,6 +413,11 @@ for (feature in features) {
 }
 ```
 
+The first, second, fourth, and fifth partial dependence plots align with the conclusions drawn from the linear regression analysis.
+
+The partial dependence plot for Median_distance_to_nearest_obstetrics_department shows an initial increase followed by a slight decrease as the Median_distance_to_nearest_obstetrics_department increases. This suggests that, in most counties, maternal mortality rates tend to rise with increasing distances to obstetrics departments, indicating that access to obstetric care is a critical factor. However, in rural counties, where the Median_distance_to_nearest_obstetrics_department is typically higher, the population density is lower, resulting in fewer pregnancies and, consequently, a lower maternal mortality rate despite the greater distances.
+
+
 
 ```{r}
 # Extract the importance metrics as a named vector
@@ -425,9 +440,6 @@ print(sorted_by_mse)
 The column `%IncMSE` stands for percentage increase in Mean Squared Error.
 Measures how much the model’s prediction error increases when a particular variable is randomly permuted while keeping all other variables unchanged..
 Higher values indicate that the variable is important for the model's predictive accuracy.It reflects the variable's contribution to the overall model performance.
-The column `IncNodePurity` stands for Increase in Node Purity.
-Reflects the total decrease in node impurity (measured by RSS for regression) attributed to splits involving this variable.
-Higher values suggest that the variable contributes significantly to better node splits.
 
 ```{r}
 # Adjust margins for longer labels
@@ -443,42 +455,34 @@ barplot(sorted_by_mse[, "X.IncMSE"],
         cex.names = 0.5)
 ```
 
-
 Socioeconomic Factors
 
-The coefficients for `Percent_pop_Black_and_African_American`, `Percent_pop_Asian`, and `Percent_pop_Hispanic` are positive and significant, suggesting that a higher percentage of these racial populations is associated with increased maternal mortality. This highlights the impact of systemic inequities and potential disparities in healthcare access.
+The coefficients for Percent_pop_Black_and_African_American and Percent_pop_American_Indian_and_Alaska_Native are positive and significant, indicating that a higher percentage of these racial populations is associated with increased maternal mortality. This highlights the impact of systemic inequities and potential disparities in healthcare access.
 
-Solution:
-
-Address racial disparities by improving access to healthcare for minority populations.
-Implement culturally tailored maternal health programs to meet the specific needs of these communities.
-Invest in training healthcare providers to ensure culturally competent and bias-free care.
+Solutions:
+Improve Healthcare Access: Expand healthcare services in minority-dense areas to reduce disparities.
+Culturally Tailored Programs: Implement maternal health programs designed to meet the unique needs of these communities.
+Provider Training: Invest in training healthcare providers to ensure culturally competent and bias-free care.
 
 Demographic Trends
+The coefficient for Percent_pop_30_44 is negatively significant, suggesting that a higher percentage of women aged 30-44 is associated with a lower maternal mortality rate. This may be because this group, compared to older groups (e.g., over 44 years), experiences fewer pregnancy-related complications. This finding implies that earlier pregnancies could potentially reduce maternal mortality risks.
 
-The coefficients for `Percent_pop_30_44` and `Percent_femal_pop` are positive and highly significant, while the coefficients for `Percent_pop_15_17` and `Percent_pop_18_29` are significantly negative. This indicates that counties with a higher percentage of women aged 30-44 experience higher maternal mortality rates. It suggests that earlier pregnancies may reduce maternal mortality risks.
-
-Solution:
-
-Provide policy support to enable younger women to start families, such as affordable childcare, flexible work arrangements, and enhanced parental leave policies.
-Raise awareness of the potential risks of delayed childbearing and provide comprehensive prenatal care for older mothers.
+Solutions:
+Policy Support for Young Mothers: Introduce affordable childcare, flexible work arrangements, and extended parental leave policies to support younger women starting families.
+Education and Awareness: Raise awareness about the risks of delayed childbearing and provide tailored prenatal care for older mothers.
 
 Healthcare Access
 
-The coefficient for `Median_distance_to_nearest_obstetrics_department` is negative and highly significant, indicating that greater distances to obstetric care facilities are associated with higher maternal mortality rates. Similarly, the coefficients for `Number_of_hospitals_with_obstetric` and `Percent_government_hospitals` are negative and significant, suggesting that increasing the number of hospitals with obstetric departments or government hospitals reduces maternal mortality.
+The coefficient for Number_of_hospitals_with_ICU is negatively significant, indicating that a greater number of hospitals with ICU facilities is associated with lower maternal mortality rates. This underscores the importance of ICU availability in reducing severe maternal outcomes.
 
-Solution:
-
-Expand access to obstetric care facilities in underserved areas.
-Build or upgrade healthcare infrastructure in regions lacking obstetric and maternal care services.
-Encourage partnerships between public and private sectors to fund and establish obstetric departments in existing hospitals.
+Solutions:
+Expand ICU Facilities: Increase the number of hospitals with ICU care, especially in underserved and rural areas.
+Upgrade Healthcare Infrastructure: Build or modernize healthcare facilities to ensure ICU services are available in high-risk regions.
 
 Economic Disparities
+The coefficient for Median_household_income is negative and significant, suggesting that counties with higher income levels tend to have lower maternal mortality rates. This highlights the influence of socioeconomic conditions on maternal health outcomes.
 
-The coefficient for `Median_household_income` is negative and significant, while the coefficient for `Unemployment_rate_per_100_population_16` is positive and significant. These findings indicate that counties with higher income levels and lower unemployment rates tend to have lower maternal mortality.
-
-Solution:
-
-Strengthen socioeconomic support for low-income and unemployed populations.
-Expand access to healthcare subsidies, prenatal care programs, and financial assistance for underserved communities.
-Implement workforce development programs to reduce unemployment and improve economic stability in high-risk counties.
+Solutions:
+Support Low-Income Populations: Strengthen socioeconomic support systems for low-income communities through targeted interventions.
+Healthcare Subsidies: Expand access to healthcare subsidies, prenatal care programs, and financial assistance for underserved populations.
+Workforce Development: Implement programs to promote economic stability and job opportunities in high-risk counties.
