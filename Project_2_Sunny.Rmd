@@ -35,7 +35,7 @@ data_raw <- read.csv("C:/Users/qluo/Box/DATS 6101/Group-Project2/Combined_SDOH_2
 ```
 
 ```{r}
-col_indices <- c('ACS_PCT_FEMALE','ACS_PCT_AGE_15_17','ACS_PCT_AGE_18_29','ACS_PCT_AGE_30_44',
+col_indices <- c('COUNTYFIPS','YEAR','ACS_PCT_FEMALE','ACS_PCT_AGE_15_17','ACS_PCT_AGE_18_29','ACS_PCT_AGE_30_44',
                  'ACS_PCT_AIAN_NONHISP','ACS_PCT_ASIAN_NONHISP',
                  'ACS_PCT_BLACK_NONHISP',
                  'ACS_PCT_HISPANIC','ACS_PCT_NHPI_NONHISP','ACS_PCT_OTHER_NONHISP',
@@ -45,7 +45,7 @@ col_indices <- c('ACS_PCT_FEMALE','ACS_PCT_AGE_15_17','ACS_PCT_AGE_18_29','ACS_P
                  'POS_HOSP_OBSTETRIC_RATE','POS_HOSP_MEDSURG_ICU_RATE','POS_HOSP_ED_RATE','POS_PCT_HOSP_GOV')
  
 subset_data <- data_raw[,col_indices]
-colnames(subset_data) <- c('Percent_femal_pop',"Percent_pop_15_17","Percent_pop_18_29","Percent_pop_30_44",
+colnames(subset_data) <- c('countyfips','YEAR','Percent_femal_pop',"Percent_pop_15_17","Percent_pop_18_29","Percent_pop_30_44",
                            'Percent_pop_American_Indian_and_Alaska_Native','Percent_pop_Asian',
                            'Percent_pop_Black_and_African_American','Percent_pop_Hispanic',
                            'Percent_pop_Native_Hawaiian_and_Pacific_Islander','Percent_pop_other_race',
@@ -60,9 +60,144 @@ colnames(subset_data) <- c('Percent_femal_pop',"Percent_pop_15_17","Percent_pop_
 ```
 Considering adding a table to show the variable names and variable labels,or we can divide the variables into different categories, making them clear.
 
-```{r}
-subset_data$Maternal_mortality_rate[is.na(subset_data$Maternal_mortality_rate)] <- 0
+We used CDC Wonder underlying cause of mortality to impute some of the missing maternal mortality rates. We also added the true zeros in maternal mortality rates as reported in CDC wonder. SDOH database did not report the true zeros.
 
+```{r}
+library(readxl)
+library(dplyr)
+library(stringr)
+
+# Function to clean County and State columns
+clean_column <- function(column) {
+  column %>%
+    str_replace_all("\\*|‡|†| ", "") %>%
+    str_trim()
+}
+
+# Process Impute_2019
+impute_2019 <- read_excel("MaternalMortality-addtl-data.xlsx", sheet = "Impute_2019") %>%
+  mutate(
+    population = as.numeric(population),
+    County = clean_column(County)
+  ) %>%
+  filter(!is.na(County)) %>%
+  mutate(
+    cnty_fips = str_sub(str_sub(County, -7), 2, 6),
+    state_fips = str_sub(cnty_fips, 1, 2)
+  )
+
+# Process State_2019
+state_2019 <- read_excel("MaternalMortality-addtl-data.xlsx", sheet = "State_2019") %>%
+  rename(maternal_multi_st = maternal_multi) %>%
+  mutate(
+    state = clean_column(state),
+    state_fips = str_sub(str_sub(state, -3), 1, 2)
+  ) %>%
+  filter(!is.na(state))
+
+# Merge 2019 data
+merged_2019 <- left_join(impute_2019, state_2019, by = "state_fips") %>%
+  group_by(state_fips) %>%
+  mutate(
+    # Stage 1
+    reported_total1 = sum(maternal_multi, na.rm = TRUE),
+    gap1 = maternal_multi_st - reported_total1,
+    # Stage 2
+    dist2 = ifelse(!is.na(all_deaths_under) & is.na(maternal_multi), 1, maternal_multi),
+    reported_total2 = sum(dist2, na.rm = TRUE),
+    gap2 = maternal_multi_st - reported_total2,
+    # Stage 3
+    dist3 = ifelse(
+      !is.na(all_deaths_under) & is.na(maternal_multi) & maternal_under != 0,
+      dist2 + (gap2 / sum(maternal_under, na.rm = TRUE) * maternal_under),
+      dist2
+    ),
+    reported_total3 = sum(dist3, na.rm = TRUE),
+    maternal_mortality_rate = dist3 / population * 100000,
+    year = 2019
+  ) %>%
+  ungroup() %>%
+  select(County, cnty_fips, maternal_mortality_rate, year)
+
+# Process Impute_2020
+impute_2020 <- read_excel("MaternalMortality-addtl-data.xlsx", sheet = "Impute_2020") %>%
+  mutate(
+    population = as.numeric(population),
+    County = clean_column(County)
+  ) %>%
+  filter(!is.na(County)) %>%
+  mutate(
+    cnty_fips = str_sub(str_sub(County, -7), 2, 6),
+    state_fips = str_sub(cnty_fips, 1, 2)
+  )
+
+# Process State_2020
+state_2020 <- read_excel("MaternalMortality-addtl-data.xlsx", sheet = "State_2020") %>%
+  rename(maternal_multi_st = maternal_multi) %>%
+  mutate(
+    state = clean_column(state),
+    state_fips = str_sub(str_sub(state, -3), 1, 2)
+  ) %>%
+  filter(!is.na(state))
+
+# Merge 2020 data
+merged_2020 <- left_join(impute_2020, state_2020, by = "state_fips") %>%
+  group_by(state_fips) %>%
+  mutate(
+    # Stage 1
+    reported_total1 = sum(maternal_multi, na.rm = TRUE),
+    gap1 = maternal_multi_st - reported_total1,
+    # Stage 2
+    dist2 = ifelse(!is.na(all_deaths_under) & is.na(maternal_multi), 1, maternal_multi),
+    reported_total2 = sum(dist2, na.rm = TRUE),
+    gap2 = maternal_multi_st - reported_total2,
+    # Stage 3
+    dist3 = ifelse(
+      !is.na(all_deaths_under) & is.na(maternal_multi) & maternal_under != 0,
+      dist2 + (gap2 / sum(maternal_under, na.rm = TRUE) * maternal_under),
+      dist2
+    ),
+    reported_total3 = sum(dist3, na.rm = TRUE),
+    maternal_mortality_rate = dist3 / population * 100000,
+    year = 2020
+  ) %>%
+  ungroup() %>%
+  select(County, cnty_fips, maternal_mortality_rate, year)
+
+# Combine 2019 and 2020 data
+combined <- bind_rows(merged_2019, merged_2020)
+
+# View final combined data
+print(combined)
+```
+
+```{r}
+
+# Ensure COUNTYFIPS in subset_data is formatted as a 5-digit string
+subset_data <- subset_data %>%
+  mutate(
+    countyfips = sprintf("%05d", as.integer(countyfips))
+  )
+
+# Join subset_data with combined on YEAR and COUNTYFIPS/cnty_fips
+merged_data <- subset_data %>%
+  left_join(
+    combined,
+    by = c("YEAR" = "year", "countyfips" = "cnty_fips")
+  )
+
+# Fill missing Maternal_mortality_rates in subset_data with values from combined
+subset_data <- merged_data %>%
+  mutate(
+    Maternal_mortality_rate = ifelse(
+      is.na(Maternal_mortality_rate),
+      maternal_mortality_rate,
+      Maternal_mortality_rate
+    )
+  ) %>%
+  select(-maternal_mortality_rate,-countyfips, -YEAR,-County) # Remove unnecessary columns if desired
+# View the updated subset_data
+print(subset_data)
 ```
 
 ```{r}
