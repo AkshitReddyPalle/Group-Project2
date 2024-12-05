@@ -27,7 +27,7 @@ knitr::opts_chunk$set(warning = F, message = F, results = "markup")
 options(scipen=999, digits = 5) 
 ```
 
-# Data
+## 1.Data ETL
 
 
 ```{r}
@@ -61,7 +61,23 @@ colnames(subset_data) <- c('countyfips','YEAR','Percent_femal_pop',"Percent_pop_
 ```
 We can divide the variables into different categories, making them clear when showing the independent variables.
 
-We used CDC Wonder underlying cause of mortality to impute some of the missing maternal mortality rates. We also added the true zeros in maternal mortality rates as reported in CDC wonder. SDOH database did not report the true zeros.
+## 2. Outcome Imputation
+
+```{r}
+print(paste0("Maternal_mortality_rate is missing in ", round(sum(is.na(subset_data$Maternal_mortality_rate))/nrow(subset_data)*100,2),"% of observations."))
+
+print(paste0("Maternal_mortality_rate is 0 in ", round(sum(subset_data$Maternal_mortality_rate==0, na.rm=T)/nrow(subset_data)*100,2),"% of observations."))
+
+```
+The highly missing nature of outcome variable *Maternal_mortality_rate* is unexpected. Also, there was no 0 maternal mortality reported in any county. We believe that ARHQ SDOH database is constructed using CDC Wonder's default output settings which suppresses deaths between 1-9 and does not output true zeros. 
+
+We used the following procedure to impute the maternal mortality counts and collaterally the maternal mortality rates.
+1. Downloaded the multiple cause maternal mortality for year 2019 and 2020 from CDC Wonder for both state and county level. We made sure that the numbers for non-missing counties matches the record in SDOH database.
+2. Downloaded the all cause mortality and underlying cause that is not maternal causes at county level from CDC Wonder. By subtracting the two, we back out the underlying cause mortality due to maternal causes.
+3. We used the underlying cause of mortality to distribute the gap between reported county level total mortality and state level total mortality, making sure that states with suppressed mortality has a mortality counts from the larger between underlying cause mortality and 1 to 9 and the counties with true zero maternal mortality stays true zero. 
+4. We replace the imputed maternal mortality rate in the original dataframe.
+
+### 2.1 CDC Wonder Data Processing and Imputing 
 
 ```{r}
 library(readxl)
@@ -73,6 +89,63 @@ clean_column <- function(column) {
   column %>%
     str_replace_all("\\*|‡|†| ", "") %>%
     str_trim()
+}
+
+# Function to handle iterative adjustments for Stage 3
+adjust_imputation <- function(data) {
+  # Initialize loop variables
+  gap_mean <- mean(data$gap3, na.rm = TRUE)
+  counter <- 0
+  
+  while (gap_mean != 0 & counter < 20) {
+    data <- data %>%
+      mutate(
+        # Step 1: Identify eligible rows for imputation
+        impute_elig = ifelse(
+          !is.na(all_deaths_under) & is.na(maternal_multi) & between(dist3, 1, 9),
+          1,
+          0
+        )
+      ) %>%
+      group_by(state_fips) %>%
+      mutate(
+        # Step 2: Calculate dist3_factor
+        dist3_factor = ifelse(
+          impute_elig == 1,
+          sum(ifelse(impute_elig == 1, impute_weight, NA), na.rm = TRUE),
+          NA
+        )
+      ) %>%
+      ungroup() %>%
+      mutate(
+        # Step 3: Update dist3
+        dist3 = ifelse(
+          impute_elig == 1,
+          ifelse(
+            dist3 + (gap3 / dist3_factor * impute_weight) <= 9,
+            dist3 + (gap3 / dist3_factor * impute_weight),
+            9
+          ),
+          dist3
+        )
+      ) %>%
+      group_by(state_fips) %>%
+      mutate(
+        # Step 4: Calculate reported_total3
+        reported_total3 = sum(dist3, na.rm = TRUE)
+      ) %>%
+      ungroup() %>%
+      mutate(
+        # Step 5: Update gap3
+        gap3 = maternal_multi_st - reported_total3
+      )
+    
+    # Update loop variables
+    gap_mean <- mean(data$gap3, na.rm = TRUE)
+    counter <- counter + 1
+  }
+  
+  return(data)
 }
 
 # Process Impute_2019
@@ -96,28 +169,36 @@ state_2019 <- read_excel("MaternalMortality-addtl-data.xlsx", sheet = "State_201
   ) %>%
   filter(!is.na(state))
 
-# Merge 2019 data
+# Merge and process 2019 data
 merged_2019 <- left_join(impute_2019, state_2019, by = "state_fips") %>%
   group_by(state_fips) %>%
   mutate(
-    # Stage 1
+    # Stage 1: Calculate reported_total1 and gap1
     reported_total1 = sum(maternal_multi, na.rm = TRUE),
     gap1 = maternal_multi_st - reported_total1,
-    # Stage 2
-    dist2 = ifelse(!is.na(all_deaths_under) & is.na(maternal_multi), 1, maternal_multi),
-    reported_total2 = sum(dist2, na.rm = TRUE),
-    gap2 = maternal_multi_st - reported_total2,
-    # Stage 3
-    dist3 = ifelse(
-      !is.na(all_deaths_under) & is.na(maternal_multi) & maternal_under != 0,
-      dist2 + (gap2 / sum(maternal_under, na.rm = TRUE) * maternal_under),
-      dist2
+    # Stage 2: Calculate dist2, reported_total2, and gap2
+    dist2 = ifelse(
+      !is.na(all_deaths_under) & is.na(maternal_multi),
+      pmax(maternal_under, 1),
+      maternal_multi
     ),
-    reported_total3 = sum(dist3, na.rm = TRUE),
+    reported_total2 = sum(dist2, na.rm = TRUE),
+    gap2 = maternal_multi_st - reported_total2
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Stage 3: Initialize dist3, gap3, and impute_weight
+    dist3 = dist2,
+    gap3 = gap2,
+    impute_weight = maternal_under + 1
+  )
+
+# Apply Stage 3 logic to adjust dist3
+merged_2019 <- adjust_imputation(merged_2019) %>%
+  mutate(
     maternal_mortality_rate = dist3 / population * 100000,
     year = 2019
   ) %>%
-  ungroup() %>%
   select(County, cnty_fips, maternal_mortality_rate, year)
 
 # Process Impute_2020
@@ -141,28 +222,36 @@ state_2020 <- read_excel("MaternalMortality-addtl-data.xlsx", sheet = "State_202
   ) %>%
   filter(!is.na(state))
 
-# Merge 2020 data
+# Merge and process 2020 data
 merged_2020 <- left_join(impute_2020, state_2020, by = "state_fips") %>%
   group_by(state_fips) %>%
   mutate(
-    # Stage 1
+    # Stage 1: Calculate reported_total1 and gap1
     reported_total1 = sum(maternal_multi, na.rm = TRUE),
     gap1 = maternal_multi_st - reported_total1,
-    # Stage 2
-    dist2 = ifelse(!is.na(all_deaths_under) & is.na(maternal_multi), 1, maternal_multi),
-    reported_total2 = sum(dist2, na.rm = TRUE),
-    gap2 = maternal_multi_st - reported_total2,
-    # Stage 3
-    dist3 = ifelse(
-      !is.na(all_deaths_under) & is.na(maternal_multi) & maternal_under != 0,
-      dist2 + (gap2 / sum(maternal_under, na.rm = TRUE) * maternal_under),
-      dist2
+    # Stage 2: Calculate dist2, reported_total2, and gap2
+    dist2 = ifelse(
+      !is.na(all_deaths_under) & is.na(maternal_multi),
+      pmax(maternal_under, 1),
+      maternal_multi
     ),
-    reported_total3 = sum(dist3, na.rm = TRUE),
+    reported_total2 = sum(dist2, na.rm = TRUE),
+    gap2 = maternal_multi_st - reported_total2
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Stage 3: Initialize dist3, gap3, and impute_weight
+    dist3 = dist2,
+    gap3 = gap2,
+    impute_weight = maternal_under + 1
+  )
+
+# Apply Stage 3 logic to adjust dist3
+merged_2020 <- adjust_imputation(merged_2020) %>%
+  mutate(
     maternal_mortality_rate = dist3 / population * 100000,
     year = 2020
   ) %>%
-  ungroup() %>%
   select(County, cnty_fips, maternal_mortality_rate, year)
 
 # Combine 2019 and 2020 data
@@ -172,8 +261,9 @@ combined <- bind_rows(merged_2019, merged_2020)
 print(head(combined))
 ```
 
-```{r}
+### 2.2 Merge Imputed Outcome to SDOH Data
 
+```{r}
 # Ensure COUNTYFIPS in subset_data is formatted as a 5-digit string
 subset_data <- subset_data %>%
   mutate(
@@ -200,12 +290,36 @@ subset_data <- merged_data %>%
 # View the updated subset_data
 print(head(subset_data))
 ```
-
+### 2.3 KNN Imputation of Other Variables
 ```{r}
-sum(complete.cases(subset_data))
-subset_data <- na.omit(subset_data)
-```
+if (!require("VIM")) install.packages("VIM")
+library(VIM)
 
+
+
+outcome_column <- subset_data$Maternal_mortality_rate
+subset_data_no_outcome <- subset_data %>%
+  select(-Maternal_mortality_rate)
+
+# Perform KNN imputation on the predictors
+subset_data_imputed <- kNN(subset_data_no_outcome, k = 5, imp_var = FALSE)
+
+# Add the outcome column back
+subset_data_imputed$outcome <- outcome_column
+
+# Apply KNN imputation
+subset_data_imputed <- kNN(subset_data, k = 5, imp_var = FALSE)
+
+
+
+# View the first few rows of the imputed dataframe
+head(subset_data_imputed)
+
+subset_data=subset_data_imputed
+```
+## 3. Descriptive Analysis of Maternal Mortality Rates
+
+It shows non-normal distribution.
 
 ```{r}
 hist(subset_data$Maternal_mortality_rate,
@@ -221,8 +335,11 @@ hist(subset_data$Maternal_mortality_rate,
 
 The bulk is 0.There are `r sum(subset_data$Maternal_mortality_rate == 0)` of 0.
 
+## 4. Linear Regression
 
+We ran linear regression in this section.
 
+### 4.1 VIF for multicollinearity
 ```{r}
 model <- lm(Maternal_mortality_rate ~ ., data=subset_data)
 vif_values <- vif(model)
@@ -233,12 +350,13 @@ The VIF values are relatively high for `Median_household_income` and `Percent_po
 
 ```{r}
 
-
 # Spearman correlation
 cor.test(subset_data$Median_household_income, subset_data$Percent_pop_under_1.37_of_poverty_threshold, method = "spearman")
 
 ```
-The coefficients for the two variables are higher than 0.8. Drop `Percent_pop_under_1.37_of_poverty_threshold` and run the model 
+The coefficients for the two variables are higher than 0.8. Drop `Percent_pop_under_1.37_of_poverty_threshold` and run the final model.
+
+### 4.2 Linear Regression Model
 ```{r}
 # Fit a model excluding Percent_pop_under_1.37_of_poverty_threshold
 model_1 <- lm(Maternal_mortality_rate ~ . - Percent_pop_under_1.37_of_poverty_threshold, data = subset_data)
@@ -260,13 +378,11 @@ The coefficient for `Number_of_hospitals_with_obstetric` is statistically signif
 
 
 
-
+### 4.3 Diagnostic Plots
 
 ```{r}
 par(mfrow = c(2, 2))  # Set up a 2x2 plot grid
 plot(model_1)
-
-
 ```
 
 ```{r}
@@ -276,7 +392,11 @@ hist(residuals,
      breaks=100,
      main = "Histogram of Residuals", xlab = "Residuals")
 ```
+The distribution of residual is slightly skewed. The skewness is minor and the sample size is relatively large. The central limit theorem can mitigate its impact on inference.
 
+## 5. Random Forest Regression
+We ran the random forest regressions in this section.
+### 5.1 Hyperparameter Tuning using MSE as Metrics
 
 ```{r}
 # Hyperparameter tuning for random forest regression tree 
@@ -342,7 +462,7 @@ for (i in 1:nrow(random_combinations)) {
   )
 }
 ```
-
+Best Model from Hyperparameter Tuning
 
 ```{r}
 
@@ -352,6 +472,7 @@ best_model
 
 ```
 
+### 5.2 Refit the final Random Forest model
 
 ```{r}
 # Fit the Final Tree-Based Model
@@ -375,10 +496,49 @@ final_rf_model <- ranger(
 ```{r}
 print(final_rf_model)
 ```
+
+### 5.3 Parameter Importance 
+```{r}
+# Extract the importance metrics as a named vector
+importance_metrics <- final_rf_model$variable.importance
+
+# Convert to a data frame for easier manipulation
+importance_df <- data.frame(
+  Variable = names(importance_metrics),
+  `%IncMSE` = importance_metrics
+)
+
+# Sort by `%IncMSE` in descending order
+sorted_by_mse <- importance_df[order(-importance_df$`X.IncMSE`), ]
+
+# View the sorted importance
+print(sorted_by_mse)
+```
+
+The column `%IncMSE` stands for percentage increase in Mean Squared Error.
+Measures how much the model’s prediction error increases when a particular variable is randomly permuted while keeping all other variables unchanged..
+Higher values indicate that the variable is important for the model's predictive accuracy.It reflects the variable's contribution to the overall model performance.
+
+```{r}
+# Adjust margins for longer labels
+par(mar = c(10, 5, 2, 2))  # Increase bottom margin
+
+# Bar plot with adjusted margins
+barplot(sorted_by_mse[, "X.IncMSE"],
+        names.arg = rownames(sorted_by_mse),
+        las = 2,
+        col = "skyblue",
+        main = "Variable Importance by %IncMSE",
+        ylab = "%IncMSE",
+        cex.names = 0.5)
+```
+
+
+### 5.4 Partial Dependence of Key Features
+
 ```{r}
 # Partial dependence for multiple features
-features <- c("Percent_pop_Black_and_African_American","Percent_pop_30_44",'Median_distance_to_nearest_obstetrics_department','Number_of_hospitals_with_obstetric','Median_household_income','Percent_femal_pop')
-
+features <- rownames(sorted_by_mse)
 
 # Loop to generate and print plots
 
@@ -413,47 +573,11 @@ for (feature in features) {
 }
 ```
 
-The first, second, fourth, and fifth partial dependence plots align with the conclusions drawn from the linear regression analysis.
+The partial dependence plot for `Percent_pop_18_29` shows with the increase of the percentage of this age group, the maternal mortality rate would go up, which can be explained that higher percentage of this group, higher pregnancy rate and higher mortality rate.
 
-The partial dependence plot for Median_distance_to_nearest_obstetrics_department shows an initial increase followed by a slight decrease as the Median_distance_to_nearest_obstetrics_department increases. This suggests that, in most counties, maternal mortality rates tend to rise with increasing distances to obstetrics departments, indicating that access to obstetric care is a critical factor. However, in rural counties, where the Median_distance_to_nearest_obstetrics_department is typically higher, the population density is lower, resulting in fewer pregnancies and, consequently, a lower maternal mortality rate despite the greater distances.
+The partial dependece plots for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American `,  `Median_household_income`, is the same with the result of the linear regression model.
 
-
-
-```{r}
-# Extract the importance metrics as a named vector
-importance_metrics <- final_rf_model$variable.importance
-
-# Convert to a data frame for easier manipulation
-importance_df <- data.frame(
-  Variable = names(importance_metrics),
-  `%IncMSE` = importance_metrics
-)
-
-# Sort by `%IncMSE` in descending order
-sorted_by_mse <- importance_df[order(-importance_df$`X.IncMSE`), ]
-
-# View the sorted importance
-print(sorted_by_mse)
-```
-
-
-The column `%IncMSE` stands for percentage increase in Mean Squared Error.
-Measures how much the model’s prediction error increases when a particular variable is randomly permuted while keeping all other variables unchanged..
-Higher values indicate that the variable is important for the model's predictive accuracy.It reflects the variable's contribution to the overall model performance.
-
-```{r}
-# Adjust margins for longer labels
-par(mar = c(10, 5, 2, 2))  # Increase bottom margin
-
-# Bar plot with adjusted margins
-barplot(sorted_by_mse[, "X.IncMSE"],
-        names.arg = rownames(sorted_by_mse),
-        las = 2,
-        col = "skyblue",
-        main = "Variable Importance by %IncMSE",
-        ylab = "%IncMSE",
-        cex.names = 0.5)
-```
+The partial dependence plot for `Median_distance_to_nearest_obstetrics_department` shows an increase in the maternal mortality rate with the increase of the `Median_distance_to_nearest_obstetrics_department` increases, indicating that access to obstetric care is a critical factor. 
 
 Socioeconomic Factors
 
