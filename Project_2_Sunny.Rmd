@@ -232,8 +232,7 @@ print(vif_values)
 The VIF values are relatively high for `Median_household_income` and `Percent_pop_under_1.37_of_poverty_threshold`. Doing the correlation test to check the multicolinearity.    
 
 ```{r}
-#Pearson correlation (default)
-cor.test(subset_data$Median_household_income, subset_data$Percent_pop_under_1.37_of_poverty_threshold, method = "pearson")
+
 
 # Spearman correlation
 cor.test(subset_data$Median_household_income, subset_data$Percent_pop_under_1.37_of_poverty_threshold, method = "spearman")
