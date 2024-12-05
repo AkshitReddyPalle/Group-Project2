@@ -365,17 +365,18 @@ model_1 <- lm(Maternal_mortality_rate ~ . - Percent_pop_under_1.37_of_poverty_th
 summary(model_1)
 
 ```
-The coefficients for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American ` are statistically significant and positive, meaning that counties with higher percentage of American Indian and Black have higher maternal mortality rate.
+The coefficients for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American` are statistically significant and positive, indicating that counties with higher percentages of American Indian and Black populations have higher maternal mortality rates. Highlights racial disparities in maternal health outcomes, driven by systemic inequities, implicit bias in healthcare, and differences in socioeconomic conditions. Structural factors like unequal access to healthcare, chronic stress from discrimination, and higher rates of comorbidities may contribute to this disparity.
 
-The coefficient for `Median_household_income` is statistically significant and negative, indicating that Higher median household income is associated with a lower maternal mortality rate.
+The coefficient for `Median_household_income` is statistically significant and negative, suggesting that higher median household incomes are associated with lower maternal mortality rates. Wealthier counties likely have better healthcare infrastructure, more resources for maternal care, and higher access to prenatal and postpartum services. Higher income levels often correlate with better health literacy, healthier lifestyles, and access to private healthcare services.
 
+The coefficient for `Number_of_hospitals_with_ICU` is statistically significant and negative, showing that Counties with more hospitals equipped with ICU facilities tend to have lower maternal mortality rates.ICU availability indicates the capacity to handle severe maternal complications (e.g., hemorrhage, sepsis) effectively.Hospitals with ICUs may also have higher overall quality of care, better-trained staff, and access to advanced medical technology.
 
-The coefficient for `Number_of_hospitals_with_ICU` is statistically significant and negative, suggesting that More hospitals with ICUs are associated with a lower maternal mortality rate.
+The coefficient for `Percent_femal_pop` is negative and statistically significant, indicating a higher percentage of females in the population is associated with a lower maternal mortality rate. This may indicate that communities with a higher proportion of females have better infrastructure and resources for women's health, or more gender-focused policies that improve maternal health outcomes.
+It could also reflect cultural or social dynamics where higher female representation leads to stronger support systems for maternal care.
 
-The coefficient for `Percent_pop_30_44` is statistically significant and negative, indicating a higher percentage of women aged 30-44 is associated with a lower maternal mortality rate. It may be explained that compared with the base group (older than 44), this group has lower maternal mortality rate.
+The coefficient for `Percent_pop_30_44` is statistically significant and negative, indicating that counties with a higher percentage of women aged 30-44 have lower maternal mortality rates. This group may represent the most biologically optimal age range for pregnancy compared to older groups (e.g., >44 years), leading to lower risks of complications.Women in this age group may also have better access to prenatal care or more stable socioeconomic conditions compared to younger women (e.g., <30 years).This may reflect the fact that, compared to the base group (women older than 44), this age group experiences fewer pregnancy-related complications.
 
-The coefficient for `Number_of_hospitals_with_obstetric` is statistically significant and positive, which might reflect referral bias, where areas with higher maternal mortality attract more obstetric services.
-
+The coefficient for `Number_of_hospitals_with_obstetric` is statistically significant and positive. Areas with more hospitals offering obstetric services often attract higher-risk pregnant women who require specialized care. These women may already face greater complications, leading to higher maternal mortality rates in these hospitals.This aligns well with healthcare patterns, where high-risk cases tend to cluster around centers of excellence or specialized facilities.
 
 
 ### 4.3 Diagnostic Plots
@@ -572,41 +573,111 @@ for (feature in features) {
     theme_minimal())
 }
 ```
+Partial Dependence of Percent_pop_18_29:
 
-The partial dependence plot for `Percent_pop_18_29` shows with the increase of the percentage of this age group, the maternal mortality rate would go up, which can be explained that higher percentage of this group, higher pregnancy rate and higher mortality rate.
+The maternal mortality rate increases steeply as the percentage of the population aged 18–29 rises to approximately 20%.
+This suggests that a higher percentage of younger populations may contribute to maternal mortality initially, likely due to increased birth rates in this group. 
 
-The partial dependece plots for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American `,  `Median_household_income`, is the same with the result of the linear regression model.
+Partial Dependence of Percent_pop_Black_and_African_American and Percent_pop_American_Indian_and_Alaska_Native:
 
-The partial dependence plot for `Median_distance_to_nearest_obstetrics_department` shows an increase in the maternal mortality rate with the increase of the `Median_distance_to_nearest_obstetrics_department` increases, indicating that access to obstetric care is a critical factor. 
+The maternal mortality rate steadily increases as the percentage of these group population rises.
+This aligns with systemic inequities and healthcare access disparities often faced by this demographic, emphasizing the need for targeted interventions.
 
-Socioeconomic Factors
+Partial Dependence of Percent_pop_under_1.37_of_poverty_threshold:
 
-The coefficients for Percent_pop_Black_and_African_American and Percent_pop_American_Indian_and_Alaska_Native are positive and significant, indicating that a higher percentage of these racial populations is associated with increased maternal mortality. This highlights the impact of systemic inequities and potential disparities in healthcare access.
+Maternal mortality rises as the percentage of people living below 1.37 times the poverty threshold increases, but the growth slows after around 40%.
+This indicates that economic hardship significantly impacts maternal mortality, although the incremental effect diminishes at higher poverty levels.
 
+Partial Dependence of Median_household_income:
+
+The maternal mortality rate declines steeply as median household income increases.
+This reinforces the association between higher socioeconomic status and improved maternal health outcomes, highlighting the importance of reducing economic disparities.
+
+Partial Dependence of Median_distance_to_nearest_obstetrics_department:
+
+Maternal mortality initially increases as the distance to the nearest obstetrics department grows but plateaus after 100 km.
+This indicates that limited access to obstetric care contributes to higher maternal mortality, but in rural areas with very high distances, the overall population and number of births may be lower, potentially mitigating the impact.
+
+1. For Percent_pop_18_29 (Young Population):
+Finding: Maternal mortality increases as the percentage of the population aged 18–29 rises but plateaus after a certain threshold.
 Solutions:
-Improve Healthcare Access: Expand healthcare services in minority-dense areas to reduce disparities.
-Culturally Tailored Programs: Implement maternal health programs designed to meet the unique needs of these communities.
-Provider Training: Invest in training healthcare providers to ensure culturally competent and bias-free care.
+Enhance prenatal and perinatal care: Ensure accessible and affordable healthcare for younger mothers to address potential complications during pregnancy and childbirth.
+Promote family planning education: Equip young women with knowledge about reproductive health and safe motherhood practices.
+Expand community health programs: Develop support groups and programs tailored for younger mothers to address unique risks they face.
 
-Demographic Trends
-The coefficient for Percent_pop_30_44 is negatively significant, suggesting that a higher percentage of women aged 30-44 is associated with a lower maternal mortality rate. This may be because this group, compared to older groups (e.g., over 44 years), experiences fewer pregnancy-related complications. This finding implies that earlier pregnancies could potentially reduce maternal mortality risks.
-
+2. For Percent_pop_Black_and_African_American (Racial Disparities):
+Finding: Maternal mortality increases with a higher percentage of the Black or African American population.
 Solutions:
-Policy Support for Young Mothers: Introduce affordable childcare, flexible work arrangements, and extended parental leave policies to support younger women starting families.
-Education and Awareness: Raise awareness about the risks of delayed childbearing and provide tailored prenatal care for older mothers.
+Address healthcare access disparities: Establish or enhance healthcare facilities in underserved areas with a high percentage of minority populations.
+Implement culturally tailored healthcare programs: Train healthcare providers in cultural competency and implicit bias reduction to provide equitable care.
+Community outreach and engagement: Build trust within these communities by involving local leaders and organizations in healthcare initiatives.
 
-Healthcare Access
-
-The coefficient for `Number_of_hospitals_with_ICU` is negatively significant, indicating that a greater number of hospitals with ICU facilities is associated with lower maternal mortality rates. This underscores the importance of ICU availability in reducing severe maternal outcomes.
-
+3. For Percent_pop_under_1.37_of_poverty_threshold (Economic Hardship):
+Finding: Maternal mortality rises significantly with higher poverty levels but stabilizes beyond a certain point.
 Solutions:
-Expand ICU Facilities: Increase the number of hospitals with ICU care, especially in underserved and rural areas.
-Upgrade Healthcare Infrastructure: Build or modernize healthcare facilities to ensure ICU services are available in high-risk regions.
+Provide financial assistance programs: Expand Medicaid coverage, maternal health subsidies, and food assistance programs for low-income families.
+Improve education and job opportunities: Invest in education and workforce development programs to lift families out of poverty in the long term.
+Increase access to affordable healthcare: Reduce or eliminate out-of-pocket expenses for maternal health services, especially for low-income populations.
 
-Economic Disparities
-The coefficient for `Median_household_income` is negative and significant, suggesting that counties with higher income levels tend to have lower maternal mortality rates. This highlights the influence of socioeconomic conditions on maternal health outcomes.
-
+4. For Median_household_income (Income Inequality):
+Finding: Higher median household income is associated with lower maternal mortality.
 Solutions:
-Support Low-Income Populations: Strengthen socioeconomic support systems for low-income communities through targeted interventions.
-Healthcare Subsidies: Expand access to healthcare subsidies, prenatal care programs, and financial assistance for underserved populations.
-Workforce Development: Implement programs to promote economic stability and job opportunities in high-risk counties.
+Strengthen social safety nets: Ensure income support programs and tax relief policies target vulnerable populations.
+Expand healthcare coverage: Provide universal maternal healthcare to ensure that income disparities do not impact maternal health outcomes.
+Target rural economic development: Create jobs and incentivize businesses to operate in underserved areas to raise household income levels.
+
+5. For Median_distance_to_nearest_obstetrics_department (Access to Care):
+Finding: Maternal mortality increases with greater distances to obstetrics departments, particularly up to 100 km.
+Solutions:
+Build more healthcare facilities: Increase the number of hospitals and clinics with obstetrics services in rural and remote areas.
+Telemedicine and mobile clinics: Use telemedicine platforms and mobile health units to provide care to women in areas with limited access.
+Subsidize transportation costs: Implement programs that cover transportation to medical appointments for pregnant women in remote locations.
+
+
+
+1. Socioeconomic Factors
+Findings:
+
+Maternal mortality is positively associated with a higher percentage of the population living under 1.37 times the poverty threshold.
+Higher median household income is associated with lower maternal mortality.
+Solutions:
+
+Economic Support:
+Provide financial assistance programs, such as Medicaid expansion, subsidies for prenatal care, and food assistance for low-income families.
+Strengthen social safety nets like tax relief policies and cash transfer programs.
+Job and Education Opportunities:
+Invest in education and workforce development programs to help families move out of poverty.
+Promote rural economic development initiatives to increase household income levels.
+Affordable Healthcare:
+Reduce out-of-pocket healthcare expenses and ensure affordable maternal health services for low-income families.
+2. Demographic Trends
+Findings:
+
+Higher maternal mortality is associated with a higher percentage of young adults aged 18–29 in the population.
+Black or African American and American Indian populations have higher maternal mortality rates, indicating systemic inequities.
+Solutions:
+
+Young Population:
+Enhance prenatal and perinatal care for younger mothers through accessible healthcare services.
+Promote family planning education to empower younger women with knowledge about reproductive health and safe motherhood practices.
+Develop community-based support programs tailored to the unique risks faced by younger mothers.
+Racial Disparities:
+Address healthcare access gaps in minority-dense areas by establishing or enhancing healthcare facilities.
+Implement culturally tailored maternal health programs and train providers in cultural competency to ensure equitable care.
+Engage with community leaders and organizations to build trust and raise awareness about maternal health services.
+3. Healthcare Access
+Findings:
+
+Maternal mortality increases with greater distances to the nearest obstetrics department (up to 100 km).
+More hospitals with ICUs are associated with a lower maternal mortality rate.
+More hospitals with obstetric departments are positively correlated with maternal mortality, potentially reflecting referral bias.
+Solutions:
+
+Improve Access to Care:
+Build more healthcare facilities with obstetric and ICU services in rural and underserved areas.
+Subsidize transportation costs for pregnant women in remote locations to access obstetric care.
+Leverage Telemedicine and Mobile Clinics:
+Use telemedicine platforms and deploy mobile health units to reach women in remote areas.
+Optimize Referral Systems:
+Analyze referral patterns to ensure high-risk patients are appropriately routed to hospitals with obstetric and ICU services.
+Strengthen coordination between hospitals to balance the patient load and provide timely care.
