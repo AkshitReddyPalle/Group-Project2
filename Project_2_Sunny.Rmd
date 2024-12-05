@@ -218,6 +218,7 @@ hist(subset_data$Maternal_mortality_rate,
      )
 
 ```
+
 The bulk is 0.There are `r sum(subset_data$Maternal_mortality_rate == 0)` of 0.
 
 
@@ -247,16 +248,16 @@ model_1 <- lm(Maternal_mortality_rate ~ . - Percent_pop_under_1.37_of_poverty_th
 summary(model_1)
 
 ```
-The coefficients for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American ` are positively significant, meaning that counties with higher percentage of American Indian and Black have higher maternal mortality rate.
+The coefficients for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American ` are statistically significant and positive, meaning that counties with higher percentage of American Indian and Black have higher maternal mortality rate.
 
-The coefficient for `Median_household_income` is negatively significant, indicating that Higher median household income is associated with a lower maternal mortality rate.
+The coefficient for `Median_household_income` is statistically significant and negative, indicating that Higher median household income is associated with a lower maternal mortality rate.
 
 
-The coefficient for `Number_of_hospitals_with_ICU` is negatively significant, suggesting that More hospitals with ICUs are associated with a lower maternal mortality rate.
+The coefficient for `Number_of_hospitals_with_ICU` is statistically significant and negative, suggesting that More hospitals with ICUs are associated with a lower maternal mortality rate.
 
-The coefficient for `Percent_pop_30_44` is negatively significant, indicating a higher percentage of women aged 30-44 is associated with a lower maternal mortality rate. It may be explained that compared with the base group (older than 44), this group has lower maternal mortality rate.
+The coefficient for `Percent_pop_30_44` is statistically significant and negative, indicating a higher percentage of women aged 30-44 is associated with a lower maternal mortality rate. It may be explained that compared with the base group (older than 44), this group has lower maternal mortality rate.
 
-The coefficient for `Number_of_hospitals_with_obstetric` is positively significant which might reflect referral bias, where areas with higher maternal mortality attract more obstetric services.
+The coefficient for `Number_of_hospitals_with_obstetric` is statistically significant and positive, which might reflect referral bias, where areas with higher maternal mortality attract more obstetric services.
 
 
 
@@ -473,14 +474,14 @@ Education and Awareness: Raise awareness about the risks of delayed childbearing
 
 Healthcare Access
 
-The coefficient for Number_of_hospitals_with_ICU is negatively significant, indicating that a greater number of hospitals with ICU facilities is associated with lower maternal mortality rates. This underscores the importance of ICU availability in reducing severe maternal outcomes.
+The coefficient for `Number_of_hospitals_with_ICU` is negatively significant, indicating that a greater number of hospitals with ICU facilities is associated with lower maternal mortality rates. This underscores the importance of ICU availability in reducing severe maternal outcomes.
 
 Solutions:
 Expand ICU Facilities: Increase the number of hospitals with ICU care, especially in underserved and rural areas.
 Upgrade Healthcare Infrastructure: Build or modernize healthcare facilities to ensure ICU services are available in high-risk regions.
 
 Economic Disparities
-The coefficient for Median_household_income is negative and significant, suggesting that counties with higher income levels tend to have lower maternal mortality rates. This highlights the influence of socioeconomic conditions on maternal health outcomes.
+The coefficient for `Median_household_income` is negative and significant, suggesting that counties with higher income levels tend to have lower maternal mortality rates. This highlights the influence of socioeconomic conditions on maternal health outcomes.
 
 Solutions:
 Support Low-Income Populations: Strengthen socioeconomic support systems for low-income communities through targeted interventions.
