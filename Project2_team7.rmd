@@ -1,0 +1,776 @@
+---
+title: "GROUP PROJECT 2 REPORT "
+author: "TEAM7 - AKSHIT , SUNNY"
+date: "2024-11-29"
+output: 
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+#INTRODUCTION 
+
+This Project focuses on understanding the socioeconomic and healthcare-related factors behind maternal death rates.BY analyzing a range of data, we aimed to uncover patters and identify areas for improvement to address this critical challenge
+
+
+#DATASET OVERVIEW
+
+##What do we know about this dataset?
+
+The Social Determinants of Health dataset was developed by the Agency for Healthcare Research
+and Quality (AHRQ). It consists of county-level data across the United States, covering various
+socio-economic and healthcare factors. It is used significantly in public health research to determine how social determinants impact health outcomes.
+
+## How was the information gathered?
+
+Data was collected from multiple sources, including national surveys, administrative records, and government databases, ensuring a wide representation of social determinants. 
+
+ 
+## What are the limitations of the dataset
+
+1.Missing Data
+2.Since the data is aggregated at the county level, it may not reflect
+individual or household-level variations
+
+#Research Question
+
+What socioeconomic and healthcare-related factors significantly influence maternal mortality rates?.
+
+Our Research question emphasizes inference.
+
+#Model Selection 
+
+1. Linear Regression : Selected for inference to determine the relationship between variables.
+
+2. Random Forest Regression : Used for prediction to evaluate feature importance and capture nonlinear        relationships.
+
+#DEPENDENT VARIABLE
+
+Maternal Mortality Rate
+
+#INDEPENDENT VARIABLE
+
+DEMOGRAPHIC VARIABLES :-
+
+Percentage of Female Population
+Percentage of Population Aged 15–17, 18–29, and 30–44
+Percentage of American Indian/Alaska Native Population
+Percentage of Asian Population
+Percentage of Black/African American Population
+Percentage of Hispanic Population
+Percentage of Native Hawaiian/Pacific Islander Population
+Percentage of Other Races
+
+SOCIOECONOMIC VARIABLES:-
+
+Median Household Income
+Percentage Below the Poverty Threshold (1.37x)
+Unemployment Rate (16+)
+Percentage Not in the Labor Force (16+)
+
+HEALTHCARE ACCESS VARIABLES:-
+
+Median Household Income
+Percentage Below the Poverty Threshold (1.37x)
+Unemployment Rate (16+)
+Percentage Not in the Labor Force (16+)
+
+#DATAPREPROCESSING
+
+##DATA EXTRACTION AND CLEANING 
+
+The dataset was read from a csv file and relevant columns were extracted for analysis.
+
+
+
+
+```{r init, include=FALSE}
+#library(ezids)
+
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(car)
+library(ranger)
+library(pdp)
+```
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F, message = F, results = "markup")
+options(scipen=999, digits = 5) 
+```
+
+
+```{r}
+data_raw <- read.csv("C:\\Users\\91970\\OneDrive\\Desktop\\GP 2 DS\\Combined_SDOH_2019_2020.csv")
+```
+
+```{r}
+col_indices <- c('COUNTYFIPS','YEAR','ACS_PCT_FEMALE','ACS_PCT_AGE_15_17',
+                 'ACS_PCT_AGE_18_29','ACS_PCT_AGE_30_44',
+                 'ACS_PCT_AIAN_NONHISP','ACS_PCT_ASIAN_NONHISP',
+                 'ACS_PCT_BLACK_NONHISP',
+                 'ACS_PCT_HISPANIC','ACS_PCT_NHPI_NONHISP','ACS_PCT_OTHER_NONHISP',
+                 'ACS_PCT_NOT_LABOR','ACS_MEDIAN_HH_INC','ACS_PCT_HEALTH_INC_BELOW137',
+                 'AHRF_UNEMPLOYED_RATE','AHRF_NURSE_MIDWIVES_RATE','CDCW_MATERNAL_DTH_RATE',
+                 'POS_MEDIAN_DIST_OBSTETRICS','POS_FQHC_RATE',
+                 'POS_HOSP_OBSTETRIC_RATE','POS_HOSP_MEDSURG_ICU_RATE','POS_HOSP_ED_RATE','POS_PCT_HOSP_GOV')
+ 
+subset_data <- data_raw[,col_indices]
+colnames(subset_data) <- c('countyfips','YEAR','Percent_femal_pop',"Percent_pop_15_17","Percent_pop_18_29","Percent_pop_30_44",
+                           'Percent_pop_American_Indian_and_Alaska_Native','Percent_pop_Asian',
+                           'Percent_pop_Black_and_African_American','Percent_pop_Hispanic',
+                           'Percent_pop_Native_Hawaiian_and_Pacific_Islander','Percent_pop_other_race',
+                           "Percent_pop_not_in_labor_force_16",'Median_household_income',
+                           'Percent_pop_under_1.37_of_poverty_threshold',
+                           "Unemployment_rate_per_100_population_16",
+                           'Number_of_midwives','Maternal_mortality_rate',
+                           'Median_distance_to_nearest_obstetrics_department','Numer_of_health_centers',
+                           'Number_of_hospitals_with_obstetric','Number_of_hospitals_with_ICU',
+                           'Number_of_hospitals_with_emergency_department','Percent_government_hospitals')
+
+```
+
+
+##Outcome Imputation
+
+The Maternal Mortality Rate was highly missing. Imputation was performed using a multi-step method involving external CDC Wonder data. 
+
+Missing rates were imputed using underlying cause mortality and state-level statistics to estimate suppressed values for counties.
+
+```{r}
+print(paste0("Maternal_mortality_rate is missing in ", round(sum(is.na(subset_data$Maternal_mortality_rate))/nrow(subset_data)*100,2),"% of observations."))
+
+print(paste0("Maternal_mortality_rate is 0 in ", round(sum(subset_data$Maternal_mortality_rate==0, na.rm=T)/nrow(subset_data)*100,2),"% of observations."))
+
+```
+
+
+```{r}
+library(readxl)
+library(dplyr)
+library(stringr)
+
+
+clean_column <- function(column) {
+  column %>%
+    str_replace_all("\\*|‡|†| ", "") %>%
+    str_trim()
+}
+
+adjust_imputation <- function(data) {
+  
+  gap_mean <- mean(data$gap3, na.rm = TRUE)
+  counter <- 0
+  
+  while (gap_mean != 0 & counter < 20) {
+    data <- data %>%
+      mutate(
+        
+        impute_elig = ifelse(
+          !is.na(all_deaths_under) & is.na(maternal_multi) & between(dist3, 1, 9),
+          1,
+          0
+        )
+      ) %>%
+      group_by(state_fips) %>%
+      mutate(
+        
+        dist3_factor = ifelse(
+          impute_elig == 1,
+          sum(ifelse(impute_elig == 1, impute_weight, NA), na.rm = TRUE),
+          NA
+        )
+      ) %>%
+      ungroup() %>%
+      mutate(
+       
+        dist3 = ifelse(
+          impute_elig == 1,
+          ifelse(
+            dist3 + (gap3 / dist3_factor * impute_weight) <= 9,
+            dist3 + (gap3 / dist3_factor * impute_weight),
+            9
+          ),
+          dist3
+        )
+      ) %>%
+      group_by(state_fips) %>%
+      mutate(
+        
+        reported_total3 = sum(dist3, na.rm = TRUE)
+      ) %>%
+      ungroup() %>%
+      mutate(
+        
+        gap3 = maternal_multi_st - reported_total3
+      )
+    
+    
+    gap_mean <- mean(data$gap3, na.rm = TRUE)
+    counter <- counter + 1
+  }
+  
+  return(data)
+}
+
+
+impute_2019 <- read_excel("C:\\Users\\91970\\OneDrive\\Desktop\\GP 2 DS\\MaternalMortality-addtl-data.xlsx", sheet = "Impute_2019") %>%
+  
+  mutate(
+    population = as.numeric(population),
+    County = clean_column(County)
+  ) %>%
+  filter(!is.na(County)) %>%
+  mutate(
+    cnty_fips = str_sub(str_sub(County, -7), 2, 6),
+    state_fips = str_sub(cnty_fips, 1, 2)
+  )
+
+
+state_2019 <- read_excel("C:\\Users\\91970\\OneDrive\\Desktop\\GP 2 DS\\MaternalMortality-addtl-data.xlsx", sheet = "State_2019") %>%
+  rename(maternal_multi_st = maternal_multi) %>%
+  mutate(
+    state = clean_column(state),
+    state_fips = str_sub(str_sub(state, -3), 1, 2)
+  ) %>%
+  filter(!is.na(state))
+
+
+merged_2019 <- left_join(impute_2019, state_2019, by = "state_fips") %>%
+  group_by(state_fips) %>%
+  mutate(
+    
+    reported_total1 = sum(maternal_multi, na.rm = TRUE),
+    gap1 = maternal_multi_st - reported_total1,
+    
+    dist2 = ifelse(
+      !is.na(all_deaths_under) & is.na(maternal_multi),
+      pmax(maternal_under, 1),
+      maternal_multi
+    ),
+    reported_total2 = sum(dist2, na.rm = TRUE),
+    gap2 = maternal_multi_st - reported_total2
+  ) %>%
+  ungroup() %>%
+  mutate(
+   
+    dist3 = dist2,
+    gap3 = gap2,
+    impute_weight = maternal_under + 1
+  )
+
+
+merged_2019 <- adjust_imputation(merged_2019) %>%
+  mutate(
+    maternal_mortality_rate = dist3 / population * 100000,
+    year = 2019
+  ) %>%
+  select(County, cnty_fips, maternal_mortality_rate, year)
+
+
+impute_2020 <- read_excel("C:\\Users\\91970\\OneDrive\\Desktop\\GP 2 DS\\MaternalMortality-addtl-data.xlsx", sheet = "Impute_2020") %>%
+  mutate(
+    population = as.numeric(population),
+    County = clean_column(County)
+  ) %>%
+  filter(!is.na(County)) %>%
+  mutate(
+    cnty_fips = str_sub(str_sub(County, -7), 2, 6),
+    state_fips = str_sub(cnty_fips, 1, 2)
+  )
+
+
+state_2020 <- read_excel("C:\\Users\\91970\\OneDrive\\Desktop\\GP 2 DS\\MaternalMortality-addtl-data.xlsx", sheet = "State_2020") %>%
+  rename(maternal_multi_st = maternal_multi) %>%
+  mutate(
+    state = clean_column(state),
+    state_fips = str_sub(str_sub(state, -3), 1, 2)
+  ) %>%
+  filter(!is.na(state))
+
+
+merged_2020 <- left_join(impute_2020, state_2020, by = "state_fips") %>%
+  group_by(state_fips) %>%
+  mutate(
+    
+    reported_total1 = sum(maternal_multi, na.rm = TRUE),
+    gap1 = maternal_multi_st - reported_total1,
+    
+    dist2 = ifelse(
+      !is.na(all_deaths_under) & is.na(maternal_multi),
+      pmax(maternal_under, 1),
+      maternal_multi
+    ),
+    reported_total2 = sum(dist2, na.rm = TRUE),
+    gap2 = maternal_multi_st - reported_total2
+  ) %>%
+  ungroup() %>%
+  mutate(
+    
+    dist3 = dist2,
+    gap3 = gap2,
+    impute_weight = maternal_under + 1
+  )
+
+
+merged_2020 <- adjust_imputation(merged_2020) %>%
+  mutate(
+    maternal_mortality_rate = dist3 / population * 100000,
+    year = 2020
+  ) %>%
+  select(County, cnty_fips, maternal_mortality_rate, year)
+
+
+combined <- bind_rows(merged_2019, merged_2020)
+
+
+print(head(combined))
+```
+
+
+
+```{r}
+
+subset_data <- subset_data %>%
+  mutate(
+    countyfips = sprintf("%05d", as.integer(countyfips))
+  )
+
+
+merged_data <- subset_data %>%
+  left_join(
+    combined,
+    by = c("YEAR" = "year", "countyfips" = "cnty_fips")
+  )
+
+
+subset_data <- merged_data %>%
+  mutate(
+    Maternal_mortality_rate = ifelse(
+      is.na(Maternal_mortality_rate),
+      maternal_mortality_rate,
+      Maternal_mortality_rate
+    )
+  ) %>%
+  select(-maternal_mortality_rate,-countyfips, -YEAR,-County)
+
+print(head(subset_data))
+```
+##KNN Imputation for Predictors
+
+The KNN method was applied to impute missing values in predictor variables. 
+
+This ensured that missing data points did not bias the analysis while maintaining data structure
+
+```{r}
+if (!require("VIM")) install.packages("VIM")
+library(VIM)
+
+
+
+outcome_column <- subset_data$Maternal_mortality_rate
+subset_data_no_outcome <- subset_data %>%
+  select(-Maternal_mortality_rate)
+
+
+subset_data_imputed <- kNN(subset_data_no_outcome, k = 5, imp_var = FALSE)
+
+
+subset_data_imputed$outcome <- outcome_column
+
+
+subset_data_imputed <- kNN(subset_data, k = 5, imp_var = FALSE)
+
+
+
+
+head(subset_data_imputed)
+
+subset_data=subset_data_imputed
+```
+
+##VIF
+
+We calculated VIF for all factors to detect multicollinearity. 
+
+Median Household Income and Percentage Population Under 1.37 times the Poverty Threshold exhibited the highest multicollinearity.
+
+Most variables such as Number of Health Centres etc had VIF below 2, indication minimal collinearity. 
+
+
+
+```{r}
+model <- lm(Maternal_mortality_rate ~ ., data=subset_data)
+vif_values <- vif(model)
+print(vif_values)
+
+```
+ 
+##Spearman Correlation 
+
+We performed the Spearman correlation test to assess the strength of the relationship between Median Household Income and Percent Population Under 1.37 times poverty threshold.
+
+The Spearman's rank correlation was -0.8787, indicating a strong negative correlation between the two variables.
+
+So based on the correlation results, we dropped the Percent Population Under 1.37 times the poverty threshold variables from the final regression model.
+
+```{r}
+
+
+cor.test(subset_data$Median_household_income, subset_data$Percent_pop_under_1.37_of_poverty_threshold, method = "spearman")
+
+```
+
+#Descriptive Analysis of Maternal Mortality Rates
+
+The Histogram is right skewed showing that majority of the regions have low maternal deaths. 
+
+Small number of regions exhibit higher rates, creating a long right tail.
+
+So it shows that Maternal Deaths are rare in most places and only a few places experience high maternal deaths.
+
+```{r}
+hist(subset_data$Maternal_mortality_rate,
+     xlim = c(0, 5),  
+     breaks = 200,     
+     col = "lightblue", 
+     main = "Histogram of Maternal Mortality Rate",
+     xlab = "Maternal Mortality Rate",
+     ylab = "Frequency"
+     )
+
+```
+
+#Linear Regression Model
+
+We performed linear regression to understand how demographic, socioeconomic and healthcare factors relate to Maternal Mortality Rates.
+
+```{r}
+# Fit a model excluding Percent_pop_under_1.37_of_poverty_threshold
+model_1 <- lm(Maternal_mortality_rate ~ . - Percent_pop_under_1.37_of_poverty_threshold, data = subset_data)
+
+# View summary
+summary(model_1)
+
+```
+
+##FINDINGS
+From the results we see that:-
+
+1. Coefficients for `Percent_pop_American_Indian_and_Alaska_Native` and `Percent_pop_Black_and_African_American` are positive and significant,showing that counties with higher percentages of American Indian and Black populations tend to have higher maternal mortality rates.
+
+2.The negative and significant coefficient for Median household income indicates that higher household incomes are linked to lower maternal mortality rates.
+
+3.The coefficient for Number_of_hospitals_with_ICU is negative and significant, indicating that counties with more ICU-equipped hospitals tend to have lower maternal mortality rates.
+
+4.The negative and significant coefficient for Percent_femal_pop suggests that a higher percentage of females in the population is linked to lower maternal mortality rates.
+
+5.The positive and significant coefficient for Number_of_hospitals_with_obstetric indicates that areas with more obstetric hospitals often serve higher-risk pregnancies, likely due to specialized care availability.
+
+##MODEL PREFORMANCE
+
+1. Multiple R Squared values is 0.0527, meaning the model explains 5.27% of the variation in maternal mortality rates
+
+2. The Adjusted R-Squares is 0.0498 which is low, accounting for the number of predictors in the model.
+
+3. The F-statistic is 17.9 showing that predictors have a significant affect on maternal mortality rates.
+
+##Limitations
+
+1. Low R-Squared Values 
+
+2. Risk of overfitting
+
+
+
+
+
+
+
+```{r}
+par(mfrow = c(2, 2))  # Set up a 2x2 plot grid
+plot(model_1)
+```
+
+##Model Diagnostics 
+
+1. Residuals vs Fitted
+
+- From the plot we can see that the residuals are scattered randomly, but some patterns suggest non linearity or uneven variance
+
+2. Q-Q plot 
+
+- From the plot we can see that points deviate from the line at the tails. Showing that the residuals are not normally distributed.
+
+3. Scale-Location Plot
+
+- From the plot we can see that residuals are scattered randomly but there are a few signs of uneven spread.
+
+4. Residuals vs Leverage 
+- From the plot we can see that a few points have high data leverage and cook's distance, meaning they could strongly affect the model.
+
+-> These plots show that the model performs well but can be improved by addressing normality issues.
+
+
+# Random Forest Regression
+
+We performed Random Forest Regression to complement the inear regression model by addressing it's limitations and providing additional insights.
+
+## Hyperparameter Tuning
+
+- We created a tuning grid to explore combinations of key hyperparameters 
+
+1.num.trees:- Number of trees in the forest: 100, 200,300,500.
+
+2.mtry:- Number of features randomly selected at each split from 1 to total number of predictors.
+
+3.splitrule:- Methods for splliting nodes: Variance,Extratrees,maxstat.
+
+4.min.node.size:- Minimum number of data points required in a terminal node: 1,5,10.
+
+5.max.depths:- Maximum depth of a tree: 0, 5, 10, 20.
+
+- A 5-fold cross validation was used to evaluate each combination
+
+- The dataset was split into 5 folds, with 4 folds used for training and 1 for validation, iteratively
+
+- For each combination, average RMSE was recorded.
+
+- The best performing combination was selected based on the lowest RMSE.
+
+```{r}
+ 
+
+tuning_grid <- expand.grid(
+  num.trees = c(100, 200, 300, 500),
+  mtry = 1:(ncol(subset_data) - 1),
+  splitrule = c("variance",'extratrees','maxstat'),    
+  min.node.size = c(1, 5, 10),
+  max.depth = c(0, 5, 10, 20)
+)
+
+
+set.seed(456)
+random_combinations <- tuning_grid[sample(nrow(tuning_grid), 60), ]
+
+
+cross_validate <- function(data, formula, params, k = 5) {
+  folds <- sample(1:k, nrow(data), replace = TRUE)
+  scores <- numeric(k)
+  
+  for (i in 1:k) {
+    
+    train_data <- data[folds != i, ]
+    val_data <- data[folds == i, ]
+    
+  
+    model <- ranger(
+      formula = formula,
+      data = train_data,
+      splitrule = params$splitrule,
+      num.trees = params$num.trees,
+      mtry = params$mtry,
+      min.node.size = params$min.node.size,
+      max.depth = params$max.depth,
+      num.threads=16
+    )
+    
+    
+    predictions <- predict(model, val_data)$predictions
+    scores[i] <- sqrt(mean((val_data$Maternal_mortality_rate - predictions)^2))
+  }
+  
+
+  mean(scores)
+}
+
+
+results <- data.frame(random_combinations, RMSE = NA)
+
+for (i in 1:nrow(random_combinations)) {
+  if (i%%50==0)(
+    cat(paste(".    ",i,"\r"))
+  )
+  else{
+    cat(".")
+  }
+  params <- random_combinations[i, ]
+  results$RMSE[i] <- cross_validate(
+    data = subset_data,
+    formula = Maternal_mortality_rate ~ .,
+    params = params
+  )
+}
+
+best_model <- results[which.min(results$RMSE), ]
+best_model
+
+```
+
+- Best model for tuning : 
+
+1. num.trees: 100
+2. mtry : 21
+3. splitrule : maxstat
+4. min.node.size : 1
+5. max.depth : 20
+6. Best RMSE: 1.3184
+
+## Refitting the Random Forest Model
+
+- We refitted the Random Forest Model using the Best Hyperparameters obtained from the tuning process.
+
+- This Final Random Forest Model provides robust predictions of maternal mortality rates and identifies key facotrs.
+
+```{r}
+
+library(randomForest)
+set.seed(123)
+final_rf_model <- ranger(
+  Maternal_mortality_rate ~ .,
+  data = subset_data,
+  num.trees = best_model$num.trees,
+  splitrule = best_model$splitrule,
+  mtry = best_model$mtry,
+  min.node.size = best_model$min.node.size,
+  max.depth = best_model$max.depth,
+  num.threads=16,
+  importance='permutation'
+  )
+
+print(final_rf_model)
+
+```
+
+## Parameter Importance
+
+- The Random Forest Model identified the most important factors influencing maternal mortality rates.
+
+```{r}
+
+importance_metrics <- final_rf_model$variable.importance
+
+
+importance_df <- data.frame(
+  Variable = names(importance_metrics),
+  `%IncMSE` = importance_metrics
+)
+
+
+sorted_by_mse <- importance_df[order(-importance_df$`X.IncMSE`), ]
+
+
+print(sorted_by_mse)
+
+
+par(mar = c(10, 5, 2, 2))  # Increase bottom margin
+
+# Bar plot with adjusted margins
+barplot(sorted_by_mse[, "X.IncMSE"],
+        names.arg = rownames(sorted_by_mse),
+        las = 2,
+        col = "skyblue",
+        main = "Variable Importance by %IncMSE",
+        ylab = "%IncMSE",
+        cex.names = 0.5)
+```
+
+From the results we see that : 
+
+1. Age group 18-29 is the most influencial. Showing higher maternal risk 
+
+2. Higher income reduces maternal mortality rates.
+
+3. Percentage of population below 1.37times the poverty threshold have high maternal mortality rates
+
+4. Longer distance to healthcare increases the risk of maternal mortality rates
+
+5. More heealth centres help reduce Maternal MOrtality Rates.
+
+##Partial Dependence of Key Features
+
+```{r}
+# Partial dependence for multiple features
+features <- rownames(sorted_by_mse)
+
+# Loop to generate and print plots
+
+for (feature in features) {
+  pd <- partial(
+    object = final_rf_model,
+    pred.var = feature,
+    train = subset_data,
+    pred.fun = function(object, newdata) {
+      predict(object, data = newdata)$predictions
+    }
+  )
+  
+  # Convert partial dependence to a data frame
+  pd_df <- as.data.frame(pd)
+  # Apply spline smoothing
+  spline_fit <- smooth.spline(pd_df[,feature], pd_df$yhat, spar = 0.7)  # spar = smoothing parameter
+  
+  # Convert spline results to a data frame for ggplot
+  spline_df <- data.frame(
+    feature = spline_fit$x,
+    yhat_smooth = spline_fit$y
+  )
+  colnames(spline_df)[1] <- feature
+  # Create a proper ggplot
+  print(ggplot(spline_df, aes_string(x = feature, y = "yhat_smooth")) +
+    geom_line() +
+    ggtitle(paste("Partial Dependence of", feature)) +
+    xlab(feature) +
+    ylab("Predicted Maternal Mortality Rate") +
+    theme_minimal())
+}
+```
+
+- From the graphs we can see that :-
+
+1. Maternal mortality rates decline as income increase and at lower income levels maternal mortality rate increase.
+
+2. High poverty rates are strongly associated with increase maternal mortality 
+
+3. Maternal Mortality is high in places with a large American Indian and African American population.
+
+4. Increase distance to obsetric care results in higher mortality rate and lower mortaity rates if the distance is short 
+
+5. A high availability of health care centers is associated with low maternal deaths.
+
+
+#Overall Conclusion
+
+## 1.Socioeconomic Factors :- 
+
+- High household income and low poverty rate are associated with a reduced maternal mortality. This suggests that better economic conditions can help in controlling Maternal Mortality Rates.
+
+## 2.Healthcare Factors :-
+
+- Proximity to obsetric care and availability of specialized hospitals can help control maternal mortality rates.
+
+## 3. Demographic Factors :-
+
+- Black and Indian population face more risks showing the need to fix unfair healthcare access and quality.
+
+
+#REFERENCES
+
+- Agency for Healthcare Research and Quality (AHRQ) Social Determinants of Health Database (2019-2020).
+
+- R packages : ranger, ggplot2, randomforest etc
+
+- R tools used : predict, lm etc
+ 
+
+
+
+
+
+
